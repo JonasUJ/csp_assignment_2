@@ -1,83 +1,77 @@
 #include "trie.h"
 #include <cstdio>
-#include <iostream>
-#include <ostream>
-#include <vector>
 
-struct Node {
-	std::vector<Node> nodes;
-	int value;
-	char key;
-};
-
-struct Trie {
-	Node node;
-};
-
-Trie create() {
-	return Trie{Node{std::vector<Node>(), 0, 0}};
-}
-
-Node* find(Node* node, char key) {
-	for (int i = 0; i < node->nodes.size(); i++) {
-		auto other = &node->nodes.at(i);
-		if (other->key == key) {
-			return other;
+static Node* find(Node* node, uint8_t key) {
+	for (auto& child : node->nodes) {
+		if (child.key == key) {
+			return &child;
 		}
 	}
 	return nullptr;
 }
 
-void insert(Trie* trie, int key, int value) {
-	const int mask = 0xff;
+void insert(Trie* trie, uint32_t key, uint32_t value) {
+	const uint32_t mask = 0xff;
 
-	auto node = &trie->node;
-	for (int shift = 0; shift < 32; shift += 8) {
-		char masked_key = (char)((mask << shift & key) >> shift);
-		auto res = find(node, masked_key);
+	Node* node = &trie->node;
+	for (int shift = 24; shift >= 0; shift -= 8) {
+		uint8_t masked_key = static_cast<uint8_t>((key >> shift) & mask);
+		Node* res = find(node, masked_key);
 
 		if (res == nullptr) {
-			Node new_node{std::vector<Node>(), 0, masked_key};
-			node->nodes.push_back(new_node);
-			node = &node->nodes.at(node->nodes.size() - 1);
+			Node new_node;
+			new_node.key = masked_key;
+			new_node.value = 0;
+			node->nodes.emplace_back(new_node);
+			node = &node->nodes.back();
 		} else {
 			node = res;
 		}
 	}
-
 	node->value = value;
 }
 
-int query(Trie* trie, int key) {
-	const int mask = 0xff;
+uint32_t query(Trie* trie, uint32_t key) {
+	const uint32_t mask = 0xff;
 
-	auto node = &trie->node;
-	for (int shift = 0; shift < 32; shift += 8) {
-		char masked_key = (char)((mask << shift & key) >> shift);
-		auto res = find(node, masked_key);
+	Node* node = &trie->node;
+	for (int shift = 24; shift >= 0; shift -= 8) {
+		uint8_t masked_key = static_cast<uint8_t>((key >> shift) & mask);
+		Node* res = find(node, masked_key);
 
 		if (res == nullptr) {
 			return 0;
-		} else {
-			node = res;
 		}
+		node = res;
 	}
-
 	return node->value;
 }
 
-void print(Node* node, int level) {
-	printf("%*sk:%i,v:%i,n:%zu\n", level*2, "", node->key, node->value, node->nodes.size());
-	for (int i = 0; i < node->nodes.size(); i++) {
-		print(&node->nodes.at(i), level + 1);
+static void rangeHelper(Node* node, int depth, uint32_t key, uint32_t low, uint32_t high,
+                        std::vector<std::pair<uint32_t, uint32_t>>& result) {
+	if (depth == 4) {
+		if (key >= low && key <= high && node->value != 0) {
+			result.emplace_back(key, node->value);
+		}
+		return;
+	}
+
+	for (auto& child : node->nodes) {
+		int shift = 24 - depth * 8;
+		uint32_t new_key = key | (static_cast<uint32_t>(child.key) << shift);
+		rangeHelper(&child, depth + 1, new_key, low, high, result);
 	}
 }
 
-void helloWorldTrie() {
-	auto trie = create();
-	insert(&trie, 8, 8);
-	insert(&trie, 8<<16, 8<<16);
-	auto val = query(&trie, 8);
-	std::cout << "value: " << val << std::endl;
-	print(&trie.node, 0);
+std::vector<std::pair<uint32_t, uint32_t>> range(Trie* trie, uint32_t low, uint32_t high) {
+	std::vector<std::pair<uint32_t, uint32_t>> result;
+	rangeHelper(&trie->node, 0, 0, low, high, result);
+	return result;
+}
+
+void print(Node* node, int level) {
+	printf("%*sk:%u, v:%u, n:%zu\n", level * 2, "", node->key, node->value, node->nodes.size());
+	for (auto& child : node->nodes) {
+		print(&child, level + 1);
+	}
 }
