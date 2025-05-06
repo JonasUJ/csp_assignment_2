@@ -17,7 +17,7 @@ public:
     std::vector<Node *> children;
     Node *next; // for leaves
 
-    Node(bool leaf) : isLeaf(leaf), next(nullptr) {}
+    explicit Node(const bool leaf) : isLeaf(leaf), next(nullptr) {}
 };
 
 BPlusTree::BPlusTree(int degree) : degree(degree), root(nullptr) {}
@@ -31,8 +31,8 @@ void BPlusTree::insertInternal(uint32_t key, Node *parent, Node *child) {
         return;
     }
 
-    auto it = std::upper_bound(parent->keys.begin(), parent->keys.end(), key);
-    int idx = it - parent->keys.begin();
+    const auto it = ranges::upper_bound(parent->keys, key);
+    const uint32_t idx = it - parent->keys.begin();
     parent->keys.insert(it, key);
     parent->children.insert(parent->children.begin() + idx + 1, child);
 
@@ -42,8 +42,8 @@ void BPlusTree::insertInternal(uint32_t key, Node *parent, Node *child) {
 }
 
 void BPlusTree::splitInternal(Node *node) {
-    int midIndex = node->keys.size() / 2;
-    uint32_t midKey = node->keys[midIndex];
+    const int midIndex = node->keys.size() / 2;
+    const uint32_t midKey = node->keys[midIndex];
 
     Node *sibling = new Node(false);
     sibling->keys.assign(node->keys.begin() + midIndex + 1, node->keys.end());
@@ -53,7 +53,7 @@ void BPlusTree::splitInternal(Node *node) {
     node->children.resize(midIndex + 1);
 
     if (node == root) {
-        Node *newRoot = new Node(false);
+        const auto newRoot = new Node(false);
         newRoot->keys.push_back(midKey);
         newRoot->children.push_back(node);
         newRoot->children.push_back(sibling);
@@ -64,9 +64,9 @@ void BPlusTree::splitInternal(Node *node) {
 }
 
 void BPlusTree::splitLeaf(Node *leaf) {
-    int midIndex = leaf->keys.size() / 2;
+    const uint32_t midIndex = leaf->keys.size() / 2;
 
-    Node *sibling = new Node(true);
+    const auto sibling = new Node(true);
     sibling->keys.assign(leaf->keys.begin() + midIndex, leaf->keys.end());
     sibling->values.assign(leaf->values.begin() + midIndex, leaf->values.end());
 
@@ -77,7 +77,7 @@ void BPlusTree::splitLeaf(Node *leaf) {
     leaf->next = sibling;
 
     if (leaf == root) {
-        Node *newRoot = new Node(false);
+        const auto newRoot = new Node(false);
         newRoot->keys.push_back(sibling->keys[0]);
         newRoot->children.push_back(leaf);
         newRoot->children.push_back(sibling);
@@ -91,17 +91,16 @@ BPlusTree::Node *BPlusTree::findParent(Node *current, Node *child) {
     if (current->isLeaf)
         return nullptr;
 
-    for (auto c: current->children) {
+    for (const auto c: current->children) {
         if (c == child)
             return current;
-        Node *p = findParent(c, child);
-        if (p)
+        if (Node *p = findParent(c, child))
             return p;
     }
     return nullptr;
 }
 
-void BPlusTree::insert(uint32_t key, uint32_t value) {
+void BPlusTree::insert(const uint32_t key, const uint32_t value) {
     if (!root) {
         root = new Node(true);
         root->keys.push_back(key);
@@ -111,14 +110,14 @@ void BPlusTree::insert(uint32_t key, uint32_t value) {
 
     Node *current = root;
     while (!current->isLeaf) {
-        auto it = std::upper_bound(current->keys.begin(), current->keys.end(), key);
-        int idx = it - current->keys.begin();
+        auto it = ranges::upper_bound(current->keys, key);
+        const uint32_t idx = it - current->keys.begin();
         current = current->children[idx];
     }
 
     // Find position for insertion
-    auto it = std::lower_bound(current->keys.begin(), current->keys.end(), key);
-    int idx = it - current->keys.begin();
+    const auto it = ranges::lower_bound(current->keys, key);
+    const uint32_t idx = it - current->keys.begin();
 
     // Update value if key already exists
     if (it != current->keys.end() && *it == key) {
@@ -135,19 +134,19 @@ void BPlusTree::insert(uint32_t key, uint32_t value) {
     }
 }
 
-uint32_t BPlusTree::query(uint32_t key) {
+uint32_t BPlusTree::query(const uint32_t key) const {
     if (!root)
         return 0;
 
     Node *current = root;
     while (!current->isLeaf) {
-        auto it = std::upper_bound(current->keys.begin(), current->keys.end(), key);
-        int idx = it - current->keys.begin();
+        auto it = ranges::upper_bound(current->keys, key);
+        const uint32_t idx = it - current->keys.begin();
         current = current->children[idx];
     }
 
-    auto it = std::lower_bound(current->keys.begin(), current->keys.end(), key);
-    int idx = it - current->keys.begin();
+    const auto it = ranges::lower_bound(current->keys, key);
+    const uint32_t idx = it - current->keys.begin();
 
     if (it != current->keys.end() && *it == key) {
         return current->values[idx];
@@ -156,10 +155,10 @@ uint32_t BPlusTree::query(uint32_t key) {
     return 0; // Return 0 if key not found
 }
 
-void BPlusTree::display() {
+void BPlusTree::display() const {
     if (!root)
         return;
-    Node *current = root;
+    const Node *current = root;
     while (!current->isLeaf)
         current = current->children[0];
 
@@ -173,7 +172,7 @@ void BPlusTree::display() {
     std::cout << "\n";
 }
 
-std::vector<std::pair<uint32_t, uint32_t>> BPlusTree::range(uint32_t low, uint32_t high) {
+std::vector<std::pair<uint32_t, uint32_t>> BPlusTree::range(const uint32_t low, const uint32_t high) const {
     std::vector<std::pair<uint32_t, uint32_t>> result;
 
     if (!root)
@@ -181,8 +180,8 @@ std::vector<std::pair<uint32_t, uint32_t>> BPlusTree::range(uint32_t low, uint32
 
     Node *current = root;
     while (!current->isLeaf) {
-        auto it = std::upper_bound(current->keys.begin(), current->keys.end(), low);
-        int idx = it - current->keys.begin();
+        auto it = ranges::upper_bound(current->keys, low);
+        const uint32_t idx = it - current->keys.begin();
         current = current->children[idx];
     }
 

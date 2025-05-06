@@ -1,7 +1,7 @@
 #include "trie.h"
 #include <cstdio>
 
-static Node *find(Node *node, uint8_t key) {
+static Node *find(Node *node, const uint8_t key) {
     for (auto &child: node->nodes) {
         if (child.key == key) {
             return &child;
@@ -10,15 +10,13 @@ static Node *find(Node *node, uint8_t key) {
     return nullptr;
 }
 
-void insert(Trie *trie, uint32_t key, uint32_t value) {
-    const uint32_t mask = 0xff;
-
+void insert(Trie *trie, const uint32_t key, const uint32_t value) {
     Node *node = &trie->node;
     for (int shift = 24; shift >= 0; shift -= 8) {
-        uint8_t masked_key = static_cast<uint8_t>((key >> shift) & mask);
-        Node *res = find(node, masked_key);
+        constexpr uint32_t mask = 0xff;
+        const auto masked_key = static_cast<uint8_t>((key >> shift) & mask);
 
-        if (res == nullptr) {
+        if (Node *res = find(node, masked_key); res == nullptr) {
             Node new_node;
             new_node.key = masked_key;
             new_node.value = 0;
@@ -31,12 +29,11 @@ void insert(Trie *trie, uint32_t key, uint32_t value) {
     node->value = value;
 }
 
-uint32_t query(Trie *trie, uint32_t key) {
-    const uint32_t mask = 0xff;
-
+uint32_t query(Trie *trie, const uint32_t key) {
     Node *node = &trie->node;
     for (int shift = 24; shift >= 0; shift -= 8) {
-        uint8_t masked_key = static_cast<uint8_t>((key >> shift) & mask);
+        constexpr uint32_t mask = 0xff;
+        const auto masked_key = static_cast<uint8_t>((key >> shift) & mask);
         Node *res = find(node, masked_key);
 
         if (res == nullptr) {
@@ -47,7 +44,7 @@ uint32_t query(Trie *trie, uint32_t key) {
     return node->value;
 }
 
-static void rangeHelper(Node *node, int depth, uint32_t key, uint32_t low, uint32_t high,
+static void rangeHelper(Node *node, const int depth, uint32_t key, const uint32_t low, const uint32_t high,
                         std::vector<std::pair<uint32_t, uint32_t>> &result) {
     if (depth == 4) {
         if (key >= low && key <= high && node->value != 0) {
@@ -57,13 +54,13 @@ static void rangeHelper(Node *node, int depth, uint32_t key, uint32_t low, uint3
     }
 
     for (auto &child: node->nodes) {
-        int shift = 24 - depth * 8;
-        uint32_t new_key = key | (static_cast<uint32_t>(child.key) << shift);
+        const uint32_t shift = 24 - depth * 8;
+        const uint32_t new_key = key | (static_cast<uint32_t>(child.key) << shift);
         rangeHelper(&child, depth + 1, new_key, low, high, result);
     }
 }
 
-std::vector<std::pair<uint32_t, uint32_t>> range(Trie *trie, uint32_t low, uint32_t high) {
+std::vector<std::pair<uint32_t, uint32_t>> range(Trie *trie, const uint32_t low, const uint32_t high) {
     std::vector<std::pair<uint32_t, uint32_t>> result;
     rangeHelper(&trie->node, 0, 0, low, high, result);
     return result;
