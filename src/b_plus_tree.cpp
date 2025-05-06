@@ -12,7 +12,8 @@ using namespace std;
 class BPlusTree::Node {
  public:
   bool isLeaf;
-  std::vector<int> keys;
+  std::vector<uint32_t> keys;
+  std::vector<uint32_t> values;
   std::vector<Node *> children;
   Node *next;  // for leaves
 
@@ -21,7 +22,7 @@ class BPlusTree::Node {
 
 BPlusTree::BPlusTree(int degree) : degree(degree), root(nullptr) {}
 
-void BPlusTree::insertInternal(int key, Node *parent, Node *child) {
+void BPlusTree::insertInternal(uint32_t key, Node *parent, Node *child) {
   if (!parent) {
     root = new Node(false);
     root->keys.push_back(key);
@@ -42,7 +43,7 @@ void BPlusTree::insertInternal(int key, Node *parent, Node *child) {
 
 void BPlusTree::splitInternal(Node *node) {
   int midIndex = node->keys.size() / 2;
-  int midKey = node->keys[midIndex];
+  uint32_t midKey = node->keys[midIndex];
 
   Node *sibling = new Node(false);
   sibling->keys.assign(node->keys.begin() + midIndex + 1, node->keys.end());
@@ -68,8 +69,10 @@ void BPlusTree::splitLeaf(Node *leaf) {
 
   Node *sibling = new Node(true);
   sibling->keys.assign(leaf->keys.begin() + midIndex, leaf->keys.end());
+  sibling->values.assign(leaf->values.begin() + midIndex, leaf->values.end());
 
   leaf->keys.resize(midIndex);
+  leaf->values.resize(midIndex);
 
   sibling->next = leaf->next;
   leaf->next = sibling;
@@ -96,10 +99,11 @@ BPlusTree::Node *BPlusTree::findParent(Node *current, Node *child) {
   return nullptr;
 }
 
-void BPlusTree::insert(int key) {
+void BPlusTree::insert(uint32_t key, uint32_t value) {
   if (!root) {
     root = new Node(true);
     root->keys.push_back(key);
+    root->values.push_back(value);
     return;
   }
 
@@ -110,16 +114,27 @@ void BPlusTree::insert(int key) {
     current = current->children[idx];
   }
 
-  auto it = std::upper_bound(current->keys.begin(), current->keys.end(), key);
+  // Find position for insertion
+  auto it = std::lower_bound(current->keys.begin(), current->keys.end(), key);
+  int idx = it - current->keys.begin();
+  
+  // Update value if key already exists
+  if (it != current->keys.end() && *it == key) {
+    current->values[idx] = value;
+    return;
+  }
+  
+  // Insert new key-value pair
   current->keys.insert(it, key);
+  current->values.insert(current->values.begin() + idx, value);
 
   if (current->keys.size() >= 2 * degree) {
     splitLeaf(current);
   }
 }
 
-bool BPlusTree::search(int key) {
-  if (!root) return false;
+uint32_t BPlusTree::query(uint32_t key) {
+  if (!root) return 0;
 
   Node *current = root;
   while (!current->isLeaf) {
@@ -128,8 +143,14 @@ bool BPlusTree::search(int key) {
     current = current->children[idx];
   }
 
-  return std::find(current->keys.begin(), current->keys.end(), key) !=
-         current->keys.end();
+  auto it = std::lower_bound(current->keys.begin(), current->keys.end(), key);
+  int idx = it - current->keys.begin();
+  
+  if (it != current->keys.end() && *it == key) {
+    return current->values[idx];
+  }
+  
+  return 0; // Return 0 if key not found
 }
 
 void BPlusTree::display() {
@@ -138,15 +159,17 @@ void BPlusTree::display() {
   while (!current->isLeaf) current = current->children[0];
 
   while (current) {
-    for (auto k : current->keys) std::cout << k << " ";
+    for (size_t i = 0; i < current->keys.size(); ++i) {
+      std::cout << "(" << current->keys[i] << ":" << current->values[i] << ") ";
+    }
     std::cout << "| ";
     current = current->next;
   }
   std::cout << "\n";
 }
 
-std::vector<int> BPlusTree::range(int low, int high) {
-  std::vector<int> result;
+std::vector<std::pair<uint32_t, uint32_t>> BPlusTree::range(uint32_t low, uint32_t high) {
+  std::vector<std::pair<uint32_t, uint32_t>> result;
 
   if (!root) return result;
 
@@ -158,9 +181,12 @@ std::vector<int> BPlusTree::range(int low, int high) {
   }
 
   while (current) {
-    for (int key : current->keys) {
+    for (size_t i = 0; i < current->keys.size(); ++i) {
+      uint32_t key = current->keys[i];
       if (key > high) return result;
-      if (key >= low) result.push_back(key);
+      if (key >= low) {
+        result.push_back(std::make_pair(key, current->values[i]));
+      }
     }
     current = current->next;
   }
