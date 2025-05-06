@@ -6,7 +6,7 @@ set(CMAKE_CXX_FLAGS "-std=c++20 -O3")
 
 set(SOURCES
     src/main.cpp
-    src/b_tree.cpp
+    src/b_plus_tree.cpp
     src/trie.cpp
 )
 
