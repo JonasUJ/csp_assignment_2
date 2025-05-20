@@ -120,22 +120,13 @@ void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std
 
             int num_queries = 100000;
 
-
             auto time_sec = run_parallel_queries(
                     tree, [](const BPlusTree &t, uint32_t key) { return t.query(key); }, num_queries, thread_count,
                     [&]() { return dist(rng); });
 
 
-            auto start = std::chrono::high_resolution_clock::now();
-            for (int q = 0; q < num_queries; ++q) {
-                uint32_t key = dist(rng);
-                volatile auto val = tree.query(key);
-            }
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = end - start;
-
-            std::cout << label << " B+Tree size " << (i + 1) << "M: " << diff.count() << "s\n";
-            out << label << "," << (i + 1) << ",random," << thread_count << "," << diff.count() << "\n";
+            std::cout << label << " B+Tree size " << (i + 1) << "M: " << time_sec << "s\n";
+            out << label << "," << (i + 1) << ",random," << thread_count << "," << time_sec << "\n";
         }
     }
 
