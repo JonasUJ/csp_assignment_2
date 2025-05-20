@@ -158,16 +158,8 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
                     thread_count, key_gen);
 
 
-            auto start = std::chrono::high_resolution_clock::now();
-            for (int q = 0; q < num_queries; ++q) {
-                uint32_t key = static_cast<uint32_t>(skew(rng)) % max_key;
-                volatile auto val = tree.query(key);
-            }
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> diff = end - start;
-
-            std::cout << label << " B+Tree size " << (i + 1) << "M: " << diff.count() << "s\n";
-            out << label << "," << (i + 1) << ",skewed," << thread_count << "," << diff.count() << "\n";
+            std::cout << label << " B+Tree size " << (i + 1) << "M: " << time_sec << "s\n";
+            out << label << "," << (i + 1) << ",skewed," << thread_count << "," << time_sec << "\n";
         }
     }
 
