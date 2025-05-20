@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(csp_assignment_2)
 
-set(CMAKE_CXX_FLAGS "-std=c++2a -O3")
+set(CMAKE_CXX_FLAGS "-std=c++2a -O3 -lpthread")
 
 set(SOURCES
     src/main.cpp
