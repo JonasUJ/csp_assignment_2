@@ -11,10 +11,18 @@
 
 
 const int inserts_for_each_size = 500000;
+const int num_queries = 1000000;
 
 template<typename Structure, typename QueryFn>
-double run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
+int run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
                             std::function<uint32_t()> key_gen) {
+    std::vector<uint32_t> keys(num_queries);
+
+    // Generate all keys up front
+    for (int i = 0; i < num_queries; ++i) {
+        keys[i] = key_gen();
+    }
+
     std::vector<std::thread> threads;
     int queries_per_thread = num_queries / num_threads;
 
@@ -22,8 +30,11 @@ double run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num
 
     for (int t = 0; t < num_threads; ++t) {
         threads.emplace_back([&, t]() {
-            for (int i = 0; i < queries_per_thread; ++i) {
-                uint32_t key = key_gen();
+            int start_idx = t * queries_per_thread;
+            int end_idx = (t + 1) * queries_per_thread;
+
+            for (int i = start_idx; i < end_idx; ++i) {
+                uint32_t key = keys[i];
                 volatile auto val = query_fn(data_structure, key);
             }
         });
@@ -34,14 +45,14 @@ double run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = end - start;
-    return diff.count();
+    auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    return static_cast<int>(diff.count());
 }
 
 void measure_random_queries_tries(std::vector<Trie> &tries, const std::string &label, const std::vector<int> &threads) {
     std::ofstream out("random_queries_trie.csv", std::ios::app);
     if (out.tellp() == 0) {
-        out << "structure,size_millions,query_type,thread_level,time_seconds\n";
+        out << "structure,size_millions,query_type,thread_level,time\n";
     }
 
     for (auto thread_count: threads) {
@@ -51,18 +62,15 @@ void measure_random_queries_tries(std::vector<Trie> &tries, const std::string &l
             Trie &trie = tries[i];
 
             std::mt19937 rng(static_cast<unsigned>(i + thread_count));
-            std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>((i + 1) * 1000000 - 1));
-
-
-            int num_queries = 100000;
+            std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>((i + 1) * inserts_for_each_size - 1));
 
             auto time_sec = run_parallel_queries(
                     trie, [](Trie &t, uint32_t key) { return query(&t, key); }, num_queries, thread_count,
                     [&]() { return dist(rng); });
 
 
-            std::cout << label << " Trie size " << (i + 1) << "M: " << time_sec << "s\n";
-            out << label << "," << (i + 1) << ",random," << thread_count << "," << time_sec << "\n";
+            std::cout << label << " Trie size " << (i + 1) * inserts_for_each_size << ": " << time_sec << "ns\n";
+            out << label << "," << (i + 1) * inserts_for_each_size << ",random," << thread_count << "," << time_sec << "\n";
         }
     }
 
@@ -73,7 +81,7 @@ void measure_random_queries_tries(std::vector<Trie> &tries, const std::string &l
 void measure_skewed_queries_tries(std::vector<Trie> &tries, const std::string &label, const std::vector<int> &threads) {
     std::ofstream out("skewed_queries_trie.csv", std::ios::app);
     if (out.tellp() == 0) {
-        out << "structure,size_millions,query_type,thread_level,time_seconds\n";
+        out << "structure,size_millions,query_type,thread_level,time\n";
     }
 
     for (auto thread_count: threads) {
@@ -84,18 +92,16 @@ void measure_skewed_queries_tries(std::vector<Trie> &tries, const std::string &l
             std::mt19937 rng(static_cast<unsigned>(i + 999 + thread_count));
             std::exponential_distribution<> skew(0.00001);
 
-            int num_queries = 100000;
             int max_key = (i + 1) * inserts_for_each_size;
 
             auto key_gen = [=]() mutable { return static_cast<uint32_t>(skew(rng)) % max_key; };
 
-
-            double time_sec = run_parallel_queries(
+            auto time_sec = run_parallel_queries(
                     trie, [](Trie &t, uint32_t key) -> uint32_t { return query(&t, key); }, num_queries, thread_count,
                     key_gen);
 
-            std::cout << label << " Trie size " << (i + 1) << "M: " << time_sec << "s\n";
-            out << label << "," << (i + 1) << ",skewed," << thread_count << "," << time_sec << "\n";
+            std::cout << label << " Trie size " << (i + 1) * inserts_for_each_size << ": " << time_sec << "ns\n";
+            out << label << "," << (i + 1) * inserts_for_each_size << ",skewed," << thread_count << "," << time_sec << "\n";
         }
     }
 
@@ -106,7 +112,7 @@ void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std
                                   const std::vector<int> &threads) {
     std::ofstream out("random_queries_bplustree.csv", std::ios::app);
     if (out.tellp() == 0) {
-        out << "structure,size_millions,query_type,thread_level,time_seconds\n";
+        out << "structure,size_millions,query_type,thread_level,time\n";
     }
 
     for (auto thread_count: threads) {
@@ -116,17 +122,15 @@ void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std
             const BPlusTree &tree = trees[i];
 
             std::mt19937 rng(static_cast<unsigned>(i + thread_count));
-            std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>((i + 1) * 1000000 - 1));
-
-            int num_queries = 100000;
+            std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>((i + 1) * inserts_for_each_size - 1));
 
             auto time_sec = run_parallel_queries(
                     tree, [](const BPlusTree &t, uint32_t key) { return t.query(key); }, num_queries, thread_count,
                     [&]() { return dist(rng); });
 
 
-            std::cout << label << " B+Tree size " << (i + 1) << "M: " << time_sec << "s\n";
-            out << label << "," << (i + 1) << ",random," << thread_count << "," << time_sec << "\n";
+            std::cout << label << " B+Tree size " << (i + 1) * inserts_for_each_size << ": " << time_sec << "ns\n";
+            out << label << "," << (i + 1) * inserts_for_each_size << ",random," << thread_count << "," << time_sec << "\n";
         }
     }
 
@@ -137,7 +141,7 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
                                   const std::vector<int> &threads) {
     std::ofstream out("skewed_queries_bplustree.csv", std::ios::app);
     if (out.tellp() == 0) {
-        out << "structure,size_millions,query_type,thread_level,time_seconds\n";
+        out << "structure,size_millions,query_type,thread_level,time\n";
     }
 
     for (auto thread_count: threads) {
@@ -148,18 +152,17 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
             std::mt19937 rng(static_cast<unsigned>(i + 999 + thread_count));
             std::exponential_distribution<> skew(0.00001);
 
-            int num_queries = 100000;
             int max_key = (i + 1) * inserts_for_each_size;
 
             auto key_gen = [=]() mutable { return static_cast<uint32_t>(skew(rng)) % max_key; };
 
-            double time_sec = run_parallel_queries(
+            auto time_sec = run_parallel_queries(
                     tree, [](const BPlusTree &t, uint32_t key) -> uint32_t { return t.query(key); }, num_queries,
                     thread_count, key_gen);
 
 
-            std::cout << label << " B+Tree size " << (i + 1) << "M: " << time_sec << "s\n";
-            out << label << "," << (i + 1) << ",skewed," << thread_count << "," << time_sec << "\n";
+            std::cout << label << " B+Tree size " << (i + 1) * inserts_for_each_size << ": " << time_sec << "ns\n";
+            out << label << "," << (i + 1) * inserts_for_each_size << ",skewed," << thread_count << "," << time_sec << "\n";
         }
     }
 
@@ -176,7 +179,6 @@ int main(int argc, char *argv[]) {
         std::vector<BPlusTree> dense_bp_trees;
         std::vector<BPlusTree> sparse_bp_trees;
         int number_of_sizes = 10;
-        int num_queries = 100000;
         int bp_degree = 64; // so each node fits in a cache line of 64 bytes. Each key is 4 bytes
 
         for (int i = 1; i <= number_of_sizes; i++) {
@@ -269,12 +271,12 @@ int main(int argc, char *argv[]) {
         tree.insert(8 << 16, 8 << 16);
         tree.insert(8 << 24, 8 << 24);
 
-        // Add some random values
-        std::mt19937 rng(static_cast<unsigned int>(std::time(nullptr)));
-        std::uniform_int_distribution<uint32_t> dist(1, 1000000);
 
         std::cout << "Adding random values to B+ Tree:\n";
         for (int i = 0; i < 10; ++i) {
+            // Add some random values
+            std::mt19937 rng(static_cast<unsigned int>(std::time(nullptr)));
+            std::uniform_int_distribution<uint32_t> dist(1, (i+1)*inserts_for_each_size);
             uint32_t random_key = dist(rng);
             uint32_t random_value = dist(rng);
             std::cout << "Adding key: " << random_key << ", value: " << random_value << "\n";
