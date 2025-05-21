@@ -1,11 +1,15 @@
 #include "trie.h"
 #include <cstdio>
+#include <algorithm>
 
 static Node *find(Node *node, const uint8_t key) {
-    for (auto &child: node->nodes) {
-        if (child.key == key) {
-            return &child;
-        }
+    auto it = std::lower_bound(node->nodes.begin(), node->nodes.end(), key, 
+        [](const Node &child, const uint8_t key) {
+            return child.key < key;
+        });
+
+    if (it != node->nodes.end() && it->key == key) {
+        return &(*it);
     }
     return nullptr;
 }
@@ -16,14 +20,19 @@ void insert(Trie *trie, const uint32_t key, const uint32_t value) {
         constexpr uint32_t mask = 0xff;
         const auto masked_key = static_cast<uint8_t>((key >> shift) & mask);
 
-        if (Node *res = find(node, masked_key); res == nullptr) {
+        auto it = std::lower_bound(node->nodes.begin(), node->nodes.end(), masked_key, 
+            [](const Node &child, const uint8_t key) {
+                return child.key < key;
+            });
+
+        if (it == node->nodes.end() || it->key != masked_key) {
             Node new_node;
             new_node.key = masked_key;
             new_node.value = 0;
-            node->nodes.emplace_back(new_node);
+            node->nodes.insert(it, new_node);
             node = &node->nodes.back();
         } else {
-            node = res;
+            node = &(*it);
         }
     }
     node->value = value;
