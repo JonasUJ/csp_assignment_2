@@ -77,8 +77,6 @@ void measure_random_queries_tries(std::vector<Trie> &tries, const std::string &l
                 << "\n";
         }
     }
-
-    out.close();
 }
 
 
@@ -105,8 +103,6 @@ void measure_skewed_queries_tries(std::vector<Trie> &tries, const std::string &l
                 << "\n";
         }
     }
-
-    out.close();
 }
 
 void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std::string &label,
@@ -130,8 +126,6 @@ void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std
                 << "\n";
         }
     }
-
-    out.close();
 }
 
 void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std::string &label,
@@ -157,8 +151,6 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
                 << "\n";
         }
     }
-
-    out.close();
 }
 
 
@@ -230,6 +222,8 @@ int main(int argc, char *argv[]) {
 
         measure_skewed_queries_bplus(dense_bp_trees, "Dense B+ Tree (skew)", threads, out);
         measure_skewed_queries_bplus(sparse_bp_trees, "Sparse B+ Tree (skew)", threads, out);
+
+        out.close();
 
     } else {
         // Test Trie
