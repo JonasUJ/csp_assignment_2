@@ -16,6 +16,8 @@ const int inserts_for_each_size = 500000;
 const int num_queries = 1000000;
 const int num_runs = 5;
 const int skew_degree = 0.0001;
+const int window_size = 1;
+
 
 template<typename Structure, typename QueryFn>
 int run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
@@ -113,6 +115,36 @@ void measure_skewed_queries_tries(std::vector<Trie> &tries, const std::string &l
     }
 }
 
+void measure_range_queries_tries(std::vector<Trie> &tries, const std::string &label, const std::vector<int> &threads,
+                                 std::ofstream &out) {
+    for (auto thread_count: threads) {
+        std::cout << "\n[Range Query Test: " << label << "] Thread level: " << thread_count << "\n";
+
+        for (size_t i = 0; i < tries.size(); i++) {
+            Trie &trie = tries[i];
+            int max_key = (i + 1) * inserts_for_each_size;
+
+            std::mt19937 rng(static_cast<unsigned>(i + thread_count));
+            std::uniform_int_distribution<uint32_t> dist(0, max_key - 1);
+
+            auto time_sec = run_parallel_queries(
+                trie,
+                [&](Trie &t, uint32_t key) -> uint32_t {
+                    uint32_t low = key;
+                    uint32_t high = std::min(key + window_size, static_cast<uint32_t>(max_key));
+                    return range(&t, low, high).size();
+                },
+                num_queries,
+                thread_count,
+                [&]() { return dist(rng); }
+            );
+
+            std::cout << label << " Trie size " << max_key << ": " << time_sec << "ns\n";
+            out << label << "," << max_key << ",range," << thread_count << "," << time_sec << "\n";
+        }
+    }
+}
+
 void measure_random_queries_bplus(const std::vector<BPlusTree> &trees, const std::string &label,
                                   const std::vector<int> &threads, std::ofstream &out) {
     for (auto thread_count: threads) {
@@ -161,6 +193,35 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
     }
 }
 
+void measure_range_queries_bplus(const std::vector<BPlusTree> &trees, const std::string &label, const std::vector<int> &threads,
+                                 std::ofstream &out) {
+    for (auto thread_count: threads) {
+        std::cout << "\n[Range Query Test: " << label << "] Thread level: " << thread_count << "\n";
+
+        for (size_t i = 0; i < trees.size(); i++) {
+            const BPlusTree &tree = trees[i];
+            int max_key = (i + 1) * inserts_for_each_size;
+
+            std::mt19937 rng(static_cast<unsigned>(i + thread_count));
+            std::uniform_int_distribution<uint32_t> dist(0, max_key - 1);
+
+            auto time_sec = run_parallel_queries(
+                tree,
+                [&](const BPlusTree &t, uint32_t key) -> uint32_t {
+                    uint32_t low = key;
+                    uint32_t high = std::min(key + window_size, static_cast<uint32_t>(max_key));
+                    return t.range(low, high).size();
+                },
+                num_queries,
+                thread_count,
+                [&]() { return dist(rng); }
+            );
+
+            std::cout << label << " B+ Tree size " << max_key << ": " << time_sec << "ns\n";
+            out << label << "," << max_key << ",range," << thread_count << "," << time_sec << "\n";
+        }
+    }
+}
 
 int main(int argc, char *argv[]) {
     std::vector<int> threads = {1, 2, 4, 8, 16, 32};
@@ -224,12 +285,15 @@ int main(int argc, char *argv[]) {
         measure_skewed_queries_tries(dense_tries, "Dense Trie (skew)", threads, out);
         measure_skewed_queries_tries(sparse_tries, "Sparse Trie (skew)", threads, out);
 
+        measure_range_queries_tries(dense_tries, "Dense Trie (range)", threads, out);
 
         measure_random_queries_bplus(dense_bp_trees, "Dense B+ Tree", threads, out);
         measure_random_queries_bplus(sparse_bp_trees, "Sparse B+ Tree", threads, out);
 
         measure_skewed_queries_bplus(dense_bp_trees, "Dense B+ Tree (skew)", threads, out);
         measure_skewed_queries_bplus(sparse_bp_trees, "Sparse B+ Tree (skew)", threads, out);
+
+        measure_range_queries_bplus(dense_bp_trees, "Dense B+ Tree (range)", threads, out);
 
         out.close();
 
