@@ -14,46 +14,54 @@
 
 const int inserts_for_each_size = 500000;
 const int num_queries = 1000000;
+const int num_runs = 5;
+const int skew_degree = 0.0001;
 
 template<typename Structure, typename QueryFn>
 int run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
                          std::function<uint32_t()> key_gen) {
-    std::vector<uint32_t> keys(num_queries);
+    int total_time = 0;
 
-    // Generate all keys up front
-    for (int i = 0; i < num_queries; ++i) {
-        keys[i] = key_gen();
+    for (int run = 0; run < num_runs; ++run) {
+        std::vector<uint32_t> keys(num_queries);
+
+        // Generate all keys up front
+        for (int i = 0; i < num_queries; ++i) {
+            keys[i] = key_gen();
+        }
+
+        std::vector<std::thread> threads;
+        int queries_per_thread = num_queries / num_threads;
+        std::atomic<bool> start_flag(false);
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&, t]() {
+                int start_idx = t * queries_per_thread;
+                int end_idx = (t + 1) * queries_per_thread;
+
+                // Wait until the start flag is set
+                while (!start_flag.load(std::memory_order_acquire));
+
+                for (int i = start_idx; i < end_idx; ++i) {
+                    uint32_t key = keys[i];
+                    volatile auto val = query_fn(data_structure, key);
+                }
+            });
+        }
+
+        auto start = std::chrono::high_resolution_clock::now();
+        start_flag.store(true, std::memory_order_release);
+
+        for (auto &thread: threads) {
+            thread.join();
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        total_time += static_cast<int>(diff.count());
     }
 
-    std::vector<std::thread> threads;
-    int queries_per_thread = num_queries / num_threads;
-    std::atomic<bool> start_flag(false);
-
-    for (int t = 0; t < num_threads; ++t) {
-        threads.emplace_back([&, t]() {
-            int start_idx = t * queries_per_thread;
-            int end_idx = (t + 1) * queries_per_thread;
-
-            // Wait until the start flag is set
-            while (!start_flag.load(std::memory_order_acquire));
-
-            for (int i = start_idx; i < end_idx; ++i) {
-                uint32_t key = keys[i];
-                volatile auto val = query_fn(data_structure, key);
-            }
-        });
-    }
-
-    auto start = std::chrono::high_resolution_clock::now();
-    start_flag.store(true, std::memory_order_release);
-
-    for (auto &thread: threads) {
-        thread.join();
-    }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-    return static_cast<int>(diff.count());
+    return total_time / num_runs; // Return the mean time
 }
 
 void measure_random_queries_tries(std::vector<Trie> &tries, const std::string &label, const std::vector<int> &threads,
@@ -88,7 +96,7 @@ void measure_skewed_queries_tries(std::vector<Trie> &tries, const std::string &l
         for (size_t i = 0; i < tries.size(); i++) {
             Trie &trie = tries[i];
             std::mt19937 rng(static_cast<unsigned>(i + 999 + thread_count));
-            std::exponential_distribution<> skew(0.00001);
+            std::exponential_distribution<> skew(skew_degree);
 
             int max_key = (i + 1) * inserts_for_each_size;
 
@@ -136,7 +144,7 @@ void measure_skewed_queries_bplus(const std::vector<BPlusTree> &trees, const std
         for (size_t i = 0; i < trees.size(); i++) {
             const BPlusTree &tree = trees[i];
             std::mt19937 rng(static_cast<unsigned>(i + 999 + thread_count));
-            std::exponential_distribution<> skew(0.00001);
+            std::exponential_distribution<> skew(skew_degree);
 
             int max_key = (i + 1) * inserts_for_each_size;
 
