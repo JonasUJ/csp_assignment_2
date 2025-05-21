@@ -65,7 +65,10 @@ static void rangeHelper(Node *node, const int depth, uint32_t key, const uint32_
     for (auto &child: node->nodes) {
         const uint32_t shift = 24 - depth * 8;
         const uint32_t new_key = key | (static_cast<uint32_t>(child.key) << shift);
-        rangeHelper(&child, depth + 1, new_key, low, high, result);
+
+        if (new_key <= high && (new_key | ((1u << (24 - depth * 8)) - 1)) >= low) {
+            rangeHelper(&child, depth + 1, new_key, low, high, result);
+        }
     }
 }
 

@@ -15,14 +15,14 @@
 const int inserts_for_each_size = 500000;
 const int num_queries = 1000000;
 const int num_runs = 5;
-const int skew_degree = 0.0001;
-const int window_size = 1;
+const double skew_degree = 0.0001;
+const int window_size = 100;
 
 
 template<typename Structure, typename QueryFn>
-int run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
+long run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_queries, int num_threads,
                          std::function<uint32_t()> key_gen) {
-    int total_time = 0;
+    long total_time = 0;
 
     for (int run = 0; run < num_runs; ++run) {
         std::vector<uint32_t> keys(num_queries);
@@ -60,7 +60,7 @@ int run_parallel_queries(Structure &data_structure, QueryFn query_fn, int num_qu
 
         auto end = std::chrono::high_resolution_clock::now();
         auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-        total_time += static_cast<int>(diff.count());
+        total_time += static_cast<long>(diff.count());
     }
 
     return total_time / num_runs; // Return the mean time
