@@ -21,10 +21,10 @@ def plot_per_structure(df, output_dir):
         # Plot each thread level as a separate line
         for thread_level, thread_group in group.groupby('thread_level'):
             sorted_group = thread_group.sort_values('size')  # sort to get a proper line plot
-            plt.plot(sorted_group['size'], sorted_group['Throughput (M q/s)'],
+            plt.plot(sorted_group['size'] / 1e6, sorted_group['Throughput (M q/s)'],
                      marker='o', label=f'Threads: {thread_level}')
 
-        plt.xlabel("Size")
+        plt.xlabel("Index Size (in millions)")
         plt.ylabel("Throughput (Million Queries per Second)")
         plt.title(f"Throughput vs Size — {structure}")
         plt.legend(title="Thread Level")

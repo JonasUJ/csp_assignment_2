@@ -15,7 +15,7 @@
 const int inserts_for_each_size = 500000;
 const int num_queries = 1000000;
 const int num_runs = 5;
-const double skew_degree = 0.0001;
+const double skew_degree = 0.00001;
 const int window_size = 100;
 
 
