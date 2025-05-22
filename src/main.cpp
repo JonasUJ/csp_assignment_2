@@ -1,3 +1,5 @@
+#include <unistd.h>
+#include <cassert>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -223,7 +225,24 @@ void measure_range_queries_bplus(const std::vector<BPlusTree> &trees, const std:
     }
 }
 
+void start_perf(int perf_ctl_fd, int perf_ctl_ack_fd) {
+    write(perf_ctl_fd, "enable\n", 7);
+    char ack[5] = {};
+    read(perf_ctl_ack_fd, ack, 5);
+    assert(strcmp(ack, "ack\n") == 0);
+}
+
+void stop_perf(int perf_ctl_fd, int perf_ctl_ack_fd) {
+    write(perf_ctl_fd, "disable\n", 8);
+    char ack[5] = {};
+    read(perf_ctl_ack_fd, ack, 5);
+    assert(strcmp(ack, "ack\n") == 0);
+}
+
 int main(int argc, char *argv[]) {
+    int perf_ctl_fd = std::atoi(std::getenv("PERF_CTL_FD"));
+    int perf_ctl_ack_fd = std::atoi(std::getenv("PERF_CTL_ACK_FD"));
+
     std::vector<int> threads = {1, 2, 4, 8, 16, 32};
     if (argc >= 2) {
 
@@ -279,6 +298,8 @@ int main(int argc, char *argv[]) {
             out << "structure,size,query_type,thread_level,time\n";
         }
 
+        start_perf(perf_ctl_fd, perf_ctl_ack_fd);
+
         measure_random_queries_tries(dense_tries, "Dense Trie", threads, out);
         measure_random_queries_tries(sparse_tries, "Sparse Trie", threads, out);
 
@@ -294,6 +315,8 @@ int main(int argc, char *argv[]) {
         measure_skewed_queries_bplus(sparse_bp_trees, "Sparse B+ Tree (skew)", threads, out);
 
         measure_range_queries_bplus(dense_bp_trees, "Dense B+ Tree (range)", threads, out);
+ 
+        stop_perf(perf_ctl_fd, perf_ctl_ack_fd);
 
         out.close();
 
