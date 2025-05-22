@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <cassert>
+#include <cstring>
 #include <chrono>
 #include <ctime>
 #include <fstream>
@@ -12,7 +13,6 @@
 #include <ranges>
 #include "b_plus_tree.h"
 #include "trie.h"
-
 
 const int inserts_for_each_size = 500000;
 const int num_queries = 1000000;
@@ -240,149 +240,77 @@ void stop_perf(int perf_ctl_fd, int perf_ctl_ack_fd) {
 }
 
 int main(int argc, char *argv[]) {
-    int perf_ctl_fd = std::atoi(std::getenv("PERF_CTL_FD"));
-    int perf_ctl_ack_fd = std::atoi(std::getenv("PERF_CTL_ACK_FD"));
-
     std::vector<int> threads = {1, 2, 4, 8, 16, 32};
-    if (argc >= 2) {
 
-        std::vector<Trie> dense_tries;
-        std::vector<Trie> sparse_tries;
-        std::vector<BPlusTree> dense_bp_trees;
-        std::vector<BPlusTree> sparse_bp_trees;
-        int number_of_sizes = 10;
-        int bp_degree = 64; // so each node fits in a cache line of 64 bytes. Each key is 4 bytes
+    std::vector<Trie> dense_tries;
+    std::vector<Trie> sparse_tries;
+    std::vector<BPlusTree> dense_bp_trees;
+    std::vector<BPlusTree> sparse_bp_trees;
+    int number_of_sizes = 10;
+    int bp_degree = 64; // so each node fits in a cache line of 64 bytes. Each key is 4 bytes
 
-        for (int i = 1; i <= number_of_sizes; i++) {
-            Trie trie;
-            trie.node.value = 0;
-            trie.node.key = 0;
-            BPlusTree tree(bp_degree);
-            int number_of_inserts = i * inserts_for_each_size;
-            for (int j = 0; j < number_of_inserts; j++) {
-                insert(&trie, j, j);
-                tree.insert(j, j);
-            }
-
-            dense_tries.push_back(trie);
-            dense_bp_trees.push_back(tree);
-            std::cout << "Created one trie and tree of size " << number_of_inserts << std::endl;
-        }
-
-        std::cout << "All tries created" << std::endl;
-
-        for (int i = 1; i <= number_of_sizes; i++) {
-            Trie trie;
-            trie.node.value = 0;
-            trie.node.key = 0;
-            BPlusTree tree(bp_degree);
-
-            int max_key_size = i * inserts_for_each_size * 2;
-
-            std::mt19937 rng(i);
-            std::uniform_int_distribution<uint32_t> dist(0, max_key_size - 1);
-
-            for (int j = 0; j < number_of_sizes; j++) {
-                uint32_t key = dist(rng);
-                insert(&trie, key, key);
-            }
-
-            sparse_tries.push_back(trie);
-            sparse_bp_trees.push_back(tree);
-        }
-
-        std::cout << "All trees created" << std::endl;
-
-        std::ofstream out("results.csv", std::ios::app);
-        if (out.tellp() == 0) {
-            out << "structure,size,query_type,thread_level,time\n";
-        }
-
-        start_perf(perf_ctl_fd, perf_ctl_ack_fd);
-
-        measure_random_queries_tries(dense_tries, "Dense Trie", threads, out);
-        measure_random_queries_tries(sparse_tries, "Sparse Trie", threads, out);
-
-        measure_skewed_queries_tries(dense_tries, "Dense Trie (skew)", threads, out);
-        measure_skewed_queries_tries(sparse_tries, "Sparse Trie (skew)", threads, out);
-
-        measure_range_queries_tries(dense_tries, "Dense Trie (range)", threads, out);
-
-        measure_random_queries_bplus(dense_bp_trees, "Dense B+ Tree", threads, out);
-        measure_random_queries_bplus(sparse_bp_trees, "Sparse B+ Tree", threads, out);
-
-        measure_skewed_queries_bplus(dense_bp_trees, "Dense B+ Tree (skew)", threads, out);
-        measure_skewed_queries_bplus(sparse_bp_trees, "Sparse B+ Tree (skew)", threads, out);
-
-        measure_range_queries_bplus(dense_bp_trees, "Dense B+ Tree (range)", threads, out);
- 
-        stop_perf(perf_ctl_fd, perf_ctl_ack_fd);
-
-        out.close();
-
-    } else {
-        // Test Trie
-        std::cout << "=== Testing Trie ===\n";
+    for (int i = 1; i <= number_of_sizes; i++) {
         Trie trie;
         trie.node.value = 0;
         trie.node.key = 0;
-
-        insert(&trie, 2, 2);
-        insert(&trie, 4, 4);
-        insert(&trie, 8, 8);
-        insert(&trie, 8 << 16, 8 << 16);
-        insert(&trie, 8 << 24, 8 << 24);
-
-        uint32_t val = query(&trie, 8);
-        std::cout << "Trie query(8) = " << val << std::endl;
-
-        std::cout << "Trie range query from 3 to (8 << 16) + 1:\n";
-        auto trie_results = range(&trie, 3, (8 << 16) + 1);
-        for (auto &[k, v]: trie_results) {
-            std::cout << "key: " << k << ", value: " << v << "\n";
+        BPlusTree tree(bp_degree);
+        int number_of_inserts = i * inserts_for_each_size;
+        for (int j = 0; j < number_of_inserts; j++) {
+            insert(&trie, j, j);
+            tree.insert(j, j);
         }
 
-        std::cout << "Full Trie:\n";
-        print(&trie.node);
-
-        // Test B+ Tree
-        std::cout << "\n=== Testing B+ Tree ===\n";
-        int degree = 3;
-        BPlusTree tree(degree);
-
-        // Insert the same values as trie for comparison
-        tree.insert(2, 2);
-        tree.insert(4, 4);
-        tree.insert(8, 8);
-        tree.insert(8 << 16, 8 << 16);
-        tree.insert(8 << 24, 8 << 24);
-
-
-        std::cout << "Adding random values to B+ Tree:\n";
-        for (int i = 0; i < 10; ++i) {
-            // Add some random values
-            std::mt19937 rng(static_cast<unsigned int>(std::time(nullptr)));
-            std::uniform_int_distribution<uint32_t> dist(1, (i + 1) * inserts_for_each_size);
-            uint32_t random_key = dist(rng);
-            uint32_t random_value = dist(rng);
-            std::cout << "Adding key: " << random_key << ", value: " << random_value << "\n";
-            tree.insert(random_key, random_value);
-        }
-
-        // Test query
-        val = tree.query(8);
-        std::cout << "B+ Tree query(8) = " << val << "\n";
-
-        // Display B+ Tree
-        std::cout << "B+ Tree contents:\n";
-        tree.display();
-
-        // Test range query
-        std::cout << "B+ Tree range query from 3 to (8 << 16) + 1:\n";
-        auto b_tree_results = tree.range(3, (8 << 16) + 1);
-        for (auto &[k, v]: b_tree_results) {
-            std::cout << "key: " << k << ", value: " << v << "\n";
-        }
+        dense_tries.push_back(trie);
+        dense_bp_trees.push_back(tree);
+        std::cout << "Created one dense trie and tree of size " << number_of_inserts << std::endl;
     }
+
+    for (int i = 1; i <= number_of_sizes; i++) {
+        Trie trie;
+        trie.node.value = 0;
+        trie.node.key = 0;
+        BPlusTree tree(bp_degree);
+
+        int max_key_size = i * inserts_for_each_size * 2;
+
+        std::mt19937 rng(i);
+        std::uniform_int_distribution<uint32_t> dist(0, max_key_size - 1);
+
+        for (int j = 0; j < max_key_size / 2; j++) {
+            uint32_t key = dist(rng);
+            insert(&trie, key, key);
+            tree.insert(key, key);
+        }
+
+        sparse_tries.push_back(trie);
+        sparse_bp_trees.push_back(tree);
+        std::cout << "Created one sparse trie and tree of size " << max_key_size / 2 << std::endl;
+    }
+
+    std::cout << "All tries/trees created" << std::endl;
+
+    std::ofstream out("results.csv", std::ios::app);
+    if (out.tellp() == 0) {
+        out << "structure,size,query_type,thread_level,time\n";
+    }
+
+    measure_random_queries_tries(dense_tries, "Dense Trie", threads, out);
+    measure_random_queries_tries(sparse_tries, "Sparse Trie", threads, out);
+
+    measure_skewed_queries_tries(dense_tries, "Dense Trie (skew)", threads, out);
+    measure_skewed_queries_tries(sparse_tries, "Sparse Trie (skew)", threads, out);
+
+    measure_range_queries_tries(dense_tries, "Dense Trie (range)", threads, out);
+
+    measure_random_queries_bplus(dense_bp_trees, "Dense B+ Tree", threads, out);
+    measure_random_queries_bplus(sparse_bp_trees, "Sparse B+ Tree", threads, out);
+
+    measure_skewed_queries_bplus(dense_bp_trees, "Dense B+ Tree (skew)", threads, out);
+    measure_skewed_queries_bplus(sparse_bp_trees, "Sparse B+ Tree (skew)", threads, out);
+
+    measure_range_queries_bplus(dense_bp_trees, "Dense B+ Tree (range)", threads, out);
+
+    out.close();
+
     return 0;
 }

@@ -1,15 +1,11 @@
 #include "trie.h"
 #include <cstdio>
-#include <algorithm>
+#include <unordered_map>
 
 static Node *find(Node *node, const uint8_t key) {
-    auto it = std::lower_bound(node->nodes.begin(), node->nodes.end(), key, 
-        [](const Node &child, const uint8_t key) {
-            return child.key < key;
-        });
-
-    if (it != node->nodes.end() && it->key == key) {
-        return &(*it);
+    auto it = node->nodes.find(key);
+    if (it != node->nodes.end()) {
+        return &(it->second);
     }
     return nullptr;
 }
@@ -20,20 +16,8 @@ void insert(Trie *trie, const uint32_t key, const uint32_t value) {
         constexpr uint32_t mask = 0xff;
         const auto masked_key = static_cast<uint8_t>((key >> shift) & mask);
 
-        auto it = std::lower_bound(node->nodes.begin(), node->nodes.end(), masked_key, 
-            [](const Node &child, const uint8_t key) {
-                return child.key < key;
-            });
-
-        if (it == node->nodes.end() || it->key != masked_key) {
-            Node new_node;
-            new_node.key = masked_key;
-            new_node.value = 0;
-            node->nodes.insert(it, new_node);
-            node = &node->nodes.back();
-        } else {
-            node = &(*it);
-        }
+        auto [it, inserted] = node->nodes.emplace(masked_key, Node{masked_key, 0, {}});
+        node = &(it->second);
     }
     node->value = value;
 }
@@ -62,12 +46,13 @@ static void rangeHelper(Node *node, const int depth, uint32_t key, const uint32_
         return;
     }
 
-    for (auto &child: node->nodes) {
+    for (auto &kv: node->nodes) {
+        const auto &child = kv.second;
         const uint32_t shift = 24 - depth * 8;
         const uint32_t new_key = key | (static_cast<uint32_t>(child.key) << shift);
 
         if (new_key <= high && (new_key | ((1u << (24 - depth * 8)) - 1)) >= low) {
-            rangeHelper(&child, depth + 1, new_key, low, high, result);
+            rangeHelper(const_cast<Node*>(&child), depth + 1, new_key, low, high, result);
         }
     }
 }
@@ -80,7 +65,7 @@ std::vector<std::pair<uint32_t, uint32_t>> range(Trie *trie, const uint32_t low,
 
 void print(Node *node, int level) {
     printf("%*sk:%u, v:%u, n:%zu\n", level * 2, "", node->key, node->value, node->nodes.size());
-    for (auto &child: node->nodes) {
-        print(&child, level + 1);
+    for (auto &kv: node->nodes) {
+        print(&kv.second, level + 1);
     }
 }

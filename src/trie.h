@@ -4,11 +4,12 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 struct Node {
-    std::vector<Node> nodes;
-    uint32_t value;
     uint8_t key;
+    uint32_t value;
+    std::unordered_map<uint8_t, Node> nodes;
 };
 
 struct Trie {
